@@ -1,0 +1,27 @@
+# learner-report-chart/values.yaml
+
+mongodb:
+  mongodb:
+  uri: mongodb+srv://praveen:LeZYHEJJm9BgEYha@microservice.szkxfkh.mongodb.net/learnerReportCS?retryWrites=true&w=majority
+
+backend:
+  image: iampraveen6/learner-report-backend
+  tag: latest
+  replicas: 2
+  port: 5000
+
+frontend:
+  image: iampraveen6/learner-report-frontend
+  tag: latest
+  replicas: 2
+  port: 80
+  serviceType: LoadBalancer
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ""
+      paths: []
+  tls: []

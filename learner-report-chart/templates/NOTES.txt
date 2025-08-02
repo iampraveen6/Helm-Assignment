@@ -1,0 +1,16 @@
+cat > ./learner-report-chart/templates/NOTES.txt << 'EOL'
+Thank you for installing {{ .Chart.Name }}.
+
+Your MERN application is now being deployed with these components:
+- Frontend: {{ .Values.frontend.replicas }} replica(s) of {{ .Values.frontend.image }}:{{ .Values.frontend.tag }}
+- Backend: {{ .Values.backend.replicas }} replica(s) of {{ .Values.backend.image }}:{{ .Values.backend.tag }}
+- MongoDB: {{ .Values.mongodb.image }} with {{ .Values.mongodb.storage }} storage
+
+{{- if eq .Values.frontend.serviceType "LoadBalancer" }}
+Frontend will be available at:
+  http://$(kubectl get svc {{ .Release.Name }}-frontend -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+{{- end }}
+
+To check deployment status:
+  kubectl get pods -l release={{ .Release.Name }}
+EOL
