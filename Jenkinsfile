@@ -1,205 +1,171 @@
 pipeline {
     agent any
-
-    /* ---------- Environment variables ---------- */
+    
     environment {
-        /* Docker Hub images */
-        FRONTEND_IMAGE = 'iampraveen6/learner-report-frontend'
-        BACKEND_IMAGE  = 'iampraveen6/learner-report-backend'
-
-        /* Relative paths inside this repo */
-        CHART_DIR  = './learner-report-chart'
-        FRONT_DIR  = './learnerReportCS_frontend'
-        BACK_DIR   = './learnerReportCS_backend'
-
-        /* Kubeconfig supplied via Jenkins credential */
-        KUBECONFIG = credentials('KUBECONFIG_FILE')
+        // General configuration
+        REPO_URL = 'https://github.com/iampraveen6/Helm-Assignment.git'
+        BRANCH = 'main'
+        
+        // Kubernetes/Helm configuration
+        KUBE_CONFIG = credentials('kubeconfig') // Kubernetes config file credential ID in Jenkins
+        HELM_VERSION = '3.12.0' // Helm version to use
+        
+        // Application specific
+        NAMESPACE = 'helm-assignment'
+        RELEASE_NAME = 'myapp'
+        
+        // Docker configuration (if needed)
+        DOCKER_REGISTRY = 'your-registry.io'
+        DOCKER_CREDENTIALS = credentials('docker-creds') // Docker registry credentials ID in Jenkins
     }
-
-    /* ---------- Global options ---------- */
+    
     options {
-        buildDiscarder(logRotator(numToKeepStr: '5'))
-        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
     }
-
+    
     stages {
-
-        /* ---------- 1. Checkout source repos ---------- */
-        stage('Clone Sources') {
+        stage('Checkout') {
             steps {
-                /* Main repo already checked out by Jenkins */
-                sh '''
-                    echo "Cloning frontend & backend repositories ..."
-                    [ -d learnerReportCS_frontend ] || \
-                        git clone https://github.com/UnpredictablePrashant/learnerReportCS_frontend.git
-                    [ -d learnerReportCS_backend ] || \
-                        git clone https://github.com/UnpredictablePrashant/learnerReportCS_backend.git
-                '''
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: env.BRANCH]],
+                    userRemoteConfigs: [[url: env.REPO_URL]]
+                ])
             }
         }
-
-        /* ---------- 2. Docker Build & Push ---------- */
-        stage('Docker Build & Push') {
-            parallel {
-                stage('Frontend') {
-                    steps {
-                        dir(env.FRONT_DIR) {
-                            script {
-                                def img = docker.build("${FRONTEND_IMAGE}:${BUILD_NUMBER}")
-                                docker.withRegistry('', 'DOCKER_HUB_CREDS') {
-                                    img.push()
-                                    img.push('latest')
-                                }
-                            }
-                        }
-                    }
-                }
-                stage('Backend') {
-                    steps {
-                        dir(env.BACK_DIR) {
-                            script {
-                                def img = docker.build("${BACKEND_IMAGE}:${BUILD_NUMBER}")
-                                docker.withRegistry('', 'DOCKER_HUB_CREDS') {
-                                    img.push()
-                                    img.push('latest')
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        /* ---------- 3. MongoDB Secret ---------- */
-        stage('Create MongoDB Secret') {
+        
+        stage('Setup Tools') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'MONGODB_USER',     variable: 'DB_USER'),
-                    string(credentialsId: 'MONGODB_PASSWORD', variable: 'DB_PASS'),
-                    string(credentialsId: 'MONGODB_URI',      variable: 'DB_URI')
-                ]) {
-                    sh '''
-                        kubectl create secret generic mongodb-secret \
-                          --from-literal=username=${DB_USER} \
-                          --from-literal=password=${DB_PASS} \
-                          --from-literal=uri=${DB_URI} \
-                          --dry-run=client -o yaml | \
-                        kubectl apply --kubeconfig=${KUBECONFIG} -f -
-                    '''
-                }
-            }
-        }
-
-        /* ---------- 4. Helm Deploy ---------- */
-        stage('Helm Deploy') {
-            steps {
-                dir(env.CHART_DIR) {
+                script {
+                    // Install Helm if not present
                     sh """
-                        helm upgrade --install learner-report . \
-                          --set backend.tag=${BUILD_NUMBER} \
-                          --set frontend.tag=${BUILD_NUMBER} \
-                          --kubeconfig=${KUBECONFIG}
+                        if ! helm version --short | grep -q 'v${HELM_VERSION}'; then
+                            curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+                            chmod 700 get_helm.sh
+                            ./get_helm.sh --version v${HELM_VERSION}
+                        fi
                     """
+                    
+                    // Configure kubectl with the provided kubeconfig
+                    withCredentials([file(credentialsId: env.KUBE_CONFIG, variable: 'KUBECONFIG_FILE')]) {
+                        sh 'mkdir -p ~/.kube'
+                        sh "cp ${KUBECONFIG_FILE} ~/.kube/config"
+                    }
+                    
+                    // Verify tools
+                    sh 'helm version'
+                    sh 'kubectl version'
                 }
             }
         }
-
-        /* ---------- 5. Quick Health-Check ---------- */
-        stage('Verify') {
+        
+        stage('Lint Helm Charts') {
             steps {
-                sh '''
-                    kubectl get pods --selector=app.kubernetes.io/name=learner-report \
-                        --kubeconfig=${KUBECONFIG}
-                    kubectl getdocker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    )docker.buildx.build(
-                        builder: 'docker',
-                        buildImage: 'docker:${DOCKER_VERSION}',
-                        contextDir: '.',
-                        tags: [
-                            "${IMAGE_NAME}:${BUILD_NUMBER}"
-                        ],
-                        forcePush: true,
-                        push: true
-                    ) svc \
-                        --kubeconfig=${KUBECONFIG}
-                '''
+                dir('helm-charts') {
+                    script {
+                        def charts = findFiles(glob: '*/Chart.yaml')
+                        charts.each { chart ->
+                            def chartDir = chart.path.replace('/Chart.yaml', '')
+                            echo "Linting chart: ${chartDir}"
+                            sh "helm lint ${chartDir}"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Create namespace if it doesn't exist
+                    sh "kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}"
+                    
+                    // Deploy each chart
+                    dir('helm-charts') {
+                        def charts = findFiles(glob: '*/Chart.yaml')
+                        charts.each { chart ->
+                            def chartDir = chart.path.replace('/Chart.yaml', '')
+                            echo "Deploying chart: ${chartDir}"
+                            
+                            // Check if release exists
+                            def releaseExists = sh(
+                                script: "helm status ${RELEASE_NAME}-${chartDir} -n ${NAMESPACE} >/dev/null 2>&1 && echo 'exists' || echo 'not exists'",
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (releaseExists == 'exists') {
+                                // Upgrade existing release
+                                sh """
+                                    helm upgrade ${RELEASE_NAME}-${chartDir} ${chartDir} \
+                                        --namespace ${NAMESPACE} \
+                                        --install \
+                                        --atomic \
+                                        --timeout 5m
+                                """
+                            } else {
+                                // Install new release
+                                sh """
+                                    helm install ${RELEASE_NAME}-${chartDir} ${chartDir} \
+                                        --namespace ${NAMESPACE} \
+                                        --atomic \
+                                        --timeout 5m
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    // Check all deployments are ready
+                    sh "kubectl get deployments -n ${NAMESPACE} -o wide"
+                    
+                    // Wait for deployments to be ready
+                    sh """
+                        kubectl wait --for=condition=available \
+                            --timeout=300s \
+                            -n ${NAMESPACE} \
+                            --all deployments
+                    """
+                    
+                    // Get services and ingress information
+                    sh "kubectl get services -n ${NAMESPACE}"
+                    sh "kubectl get ingress -n ${NAMESPACE} || true"
+                }
             }
         }
     }
-
-    /* ---------- Post-build actions ---------- */
+    
     post {
-        success {
-            echo '✅ MERN stack deployed successfully!'
+        always {
+            script {
+                // Cleanup workspace
+                cleanWs()
+                
+                // Send notification if build failed
+                if (currentBuild.result == 'FAILURE') {
+                    emailext (
+                        subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                        body: """<p>FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+                            <p>Check console output at <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
+                        to: 'devops-team@yourcompany.com',
+                        recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                    )
+                }
+            }
         }
-        failure {
-            echo '❌ Pipeline failed – see logs for details.'
+        
+        success {
+            // Send success notification
             emailext (
-                subject: "Build ${BUILD_NUMBER} FAILED",
-                body: "Check ${BUILD_URL}",
-                to: 'iampraveen6@gmail.com'
+                subject: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: """<p>SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+                    <p>Check console output at <a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a></p>""",
+                to: 'devops-team@yourcompany.com'
             )
         }
     }
