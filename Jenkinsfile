@@ -110,7 +110,79 @@ pipeline {
                 sh '''
                     kubectl get pods --selector=app.kubernetes.io/name=learner-report \
                         --kubeconfig=${KUBECONFIG}
-                    kubectl get svc \
+                    kubectl getdocker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    )docker.buildx.build(
+                        builder: 'docker',
+                        buildImage: 'docker:${DOCKER_VERSION}',
+                        contextDir: '.',
+                        tags: [
+                            "${IMAGE_NAME}:${BUILD_NUMBER}"
+                        ],
+                        forcePush: true,
+                        push: true
+                    ) svc \
                         --kubeconfig=${KUBECONFIG}
                 '''
             }
